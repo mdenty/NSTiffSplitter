@@ -193,24 +193,25 @@
     }
     
     NSMutableData *oneData = [[NSMutableData alloc] initWithLength:[self.sizeOfImage[imageIndex] intValue]];
-    
+
+    // Create a small stack buffer to avoid mallocs
+    Byte buffer[12];
+
     // Copy header
-    Byte *buffer = (Byte *)malloc(4);
     [self.data getBytes:buffer length:4];
     [oneData replaceBytesInRange:NSMakeRange(0, 4) withBytes:buffer];
-    free(buffer);
     
     // change offset of 1st IFD in header
     int var = self.isBigEndian ? 134217728 : 8; // 134217728 = (as hex) 08 00 00 00
     [oneData replaceBytesInRange:NSMakeRange(4, 4) withBytes:&var];
     
     // How much fields we will transfer to new file
-    int ifdOffset = [self.IFDOffsets[imageIndex] intValue];
+    size_t ifdOffset = [self.IFDOffsets[imageIndex] unsignedLongValue];
     size_t fieldsCount = [self valueForBytesAt:ifdOffset count:2];
     int properFields = 0;
     for (int i = 0; i < fieldsCount; ++i)
     {
-        int fieldOffset = ifdOffset + 2 + 12 * i;
+        size_t fieldOffset = ifdOffset + 2 + 12 * i;
         if ([self valueForBytesAt:fieldOffset+2 count:2] < MAX_DEFINED_TYPE + 1)
         {
             ++properFields;
@@ -218,11 +219,10 @@
     }
     
     // write count of fields in IFD in new file
-    buffer = (Byte *)malloc(2);
+    // buffer is still 12 bytes length
     buffer[self.isBigEndian ? 0 : 1] = (properFields >> 8) & 255;
     buffer[self.isBigEndian ? 1 : 0] = properFields & 255;
     [oneData replaceBytesInRange:NSMakeRange(8, 2) withBytes:buffer];
-    free(buffer);
     
     // Offset of next IFD is 0
     var = 0;
@@ -236,7 +236,7 @@
     size_t sizeOf_countOfBytesInStrip_type = 0;
     for (int i = 0; i < fieldsCount; ++i)
     {
-        int fieldOffset = ifdOffset + 2 + 12 * i;
+        size_t fieldOffset = ifdOffset + 2 + 12 * i;
         if ([self valueForBytesAt:fieldOffset+2 count:2] < MAX_DEFINED_TYPE + 1)
         {
             if ([self valueForBytesAt:fieldOffset count:2] == 273) // handle strip offsets
@@ -254,34 +254,31 @@
             if (bytesToCopy > 4) // in field's value/offset we can store only 4 bytes or offset of real data
             {
                 // Write tag, type and count of field without changes
-                buffer = (Byte *)malloc(8);
+                // buffer is still 12 bytes length
                 [self.data getBytes:buffer range:NSMakeRange(fieldOffset, 8)];
                 [oneData replaceBytesInRange:NSMakeRange(10+12*newOneFieldNumber, 8) withBytes:buffer];
-                free(buffer);
                 
                 // Write offset of field's value
-                buffer = (Byte *)malloc(4);
+                // buffer is still 12 bytes length
                 buffer[self.isBigEndian ? 0 : 3] = (largeValueOffset >> 24) & 255;
                 buffer[self.isBigEndian ? 1 : 2] = (largeValueOffset >> 16) & 255;
                 buffer[self.isBigEndian ? 2 : 1] = (largeValueOffset >> 8) & 255;
                 buffer[self.isBigEndian ? 3 : 0] = largeValueOffset & 255;
                 [oneData replaceBytesInRange:NSMakeRange(10+12*newOneFieldNumber + 8, 4) withBytes:buffer];
-                free(buffer);
                 
                 // copy data to largeValueOffset (copy large value from old place to new)
-                buffer = (Byte *)malloc(bytesToCopy);
-                [self.data getBytes:buffer range:NSMakeRange([self valueForBytesAt:fieldOffset+8 count:4], bytesToCopy)];
-                [oneData replaceBytesInRange:NSMakeRange(largeValueOffset, bytesToCopy) withBytes:buffer];
-                free(buffer);
+                Byte* heap_buffer = (Byte *)malloc(bytesToCopy);
+                [self.data getBytes:heap_buffer range:NSMakeRange([self valueForBytesAt:fieldOffset+8 count:4], bytesToCopy)];
+                [oneData replaceBytesInRange:NSMakeRange(largeValueOffset, bytesToCopy) withBytes:heap_buffer];
+                free(heap_buffer);
                 
                 largeValueOffset += bytesToCopy;
             }
             else
             {
-                buffer = (Byte *)malloc(12);
+                // buffer is still 12 bytes length
                 [self.data getBytes:buffer range:NSMakeRange(fieldOffset, 12)];
                 [oneData replaceBytesInRange:NSMakeRange(10+12*newOneFieldNumber, 12) withBytes:buffer];
-                free(buffer);
             }
             
             ++newOneFieldNumber;
@@ -294,13 +291,12 @@
     size_t stripBytesCountOffset = [self valueForBytesAt:stripByteCountsTagOld+8 count:4];
     
     // Write tag with strip offset (or offset of array with stripes's offsets)
-    buffer = (Byte *)malloc(4);
+    // buffer is still 12 bytes length
     buffer[self.isBigEndian ? 0 : 3] = (largeValueOffset >> 24) & 255;
     buffer[self.isBigEndian ? 1 : 2] = (largeValueOffset >> 16) & 255;
     buffer[self.isBigEndian ? 2 : 1] = (largeValueOffset >> 8) & 255;
     buffer[self.isBigEndian ? 3 : 0] = largeValueOffset & 255;
     [oneData replaceBytesInRange:NSMakeRange(stripOffsetsTagNew + 8, 4) withBytes:buffer];
-    free(buffer);
     
     if (countOfStripes == 1)
     {
@@ -308,19 +304,18 @@
         size_t stripOffset = offsetOfStripsOffsets;
         
         // Write data
-        buffer = (Byte *)malloc(stripBytesCount);
-        [self.data getBytes:buffer range:NSMakeRange(stripOffset, stripBytesCount)];
-        [oneData replaceBytesInRange:NSMakeRange(largeValueOffset, stripBytesCount) withBytes:buffer];
-        free(buffer);
-        
+        Byte* heap_buffer = (Byte *)malloc(stripBytesCount);
+        [self.data getBytes:heap_buffer range:NSMakeRange(stripOffset, stripBytesCount)];
+        [oneData replaceBytesInRange:NSMakeRange(largeValueOffset, stripBytesCount) withBytes:heap_buffer];
+        free(heap_buffer);
+
         // Write offset of strip
-        buffer = (Byte *)malloc(4);
+        // buffer is still 12 bytes length
         buffer[self.isBigEndian ? 0 : 3] = (largeValueOffset >> 24) & 255;
         buffer[self.isBigEndian ? 1 : 2] = (largeValueOffset >> 16) & 255;
         buffer[self.isBigEndian ? 2 : 1] = (largeValueOffset >> 8) & 255;
         buffer[self.isBigEndian ? 3 : 0] = largeValueOffset & 255;
         [oneData replaceBytesInRange:NSMakeRange(stripOffsetsTagNew + 8, 4) withBytes:buffer];
-        free(buffer);
         
         largeValueOffset += stripBytesCount;
     }
@@ -335,19 +330,18 @@
             size_t stripOffset = [self valueForBytesAt:offsetOfStripsOffsets+4*j count:4];
             
             // Write data
-            buffer = (Byte *)malloc(stripBytesCount);
-            [self.data getBytes:buffer range:NSMakeRange(stripOffset, stripBytesCount)];
-            [oneData replaceBytesInRange:NSMakeRange(largeValueOffset, stripBytesCount) withBytes:buffer];
-            free(buffer);
+            Byte* heap_buffer = (Byte *)malloc(stripBytesCount);
+            [self.data getBytes:heap_buffer range:NSMakeRange(stripOffset, stripBytesCount)];
+            [oneData replaceBytesInRange:NSMakeRange(largeValueOffset, stripBytesCount) withBytes:heap_buffer];
+            free(heap_buffer);
             
             // Write offset of strip
-            buffer = (Byte *)malloc(4);
+            // buffer is still 12 bytes length
             buffer[self.isBigEndian ? 0 : 3] = (largeValueOffset >> 24) & 255;
             buffer[self.isBigEndian ? 1 : 2] = (largeValueOffset >> 16) & 255;
             buffer[self.isBigEndian ? 2 : 1] = (largeValueOffset >> 8) & 255;
             buffer[self.isBigEndian ? 3 : 0] = largeValueOffset & 255;
             [oneData replaceBytesInRange:NSMakeRange(arrayOfStripsOffsets, 4) withBytes:buffer];
-            free(buffer);
             
             largeValueOffset += stripBytesCount;
             arrayOfStripsOffsets += 4;
