@@ -47,8 +47,10 @@
     if (splitter != nil)
     {
         currentImage = 0;
-        UIImage *page = [[UIImage alloc] initWithData:[splitter dataForImage:currentImage]];
+        NSData* data = [splitter dataForImage:currentImage];
+        UIImage *page = [[UIImage alloc] initWithData: data];
         tiffPageView.image = page;
+        [data release];
         [page release];
         
         pageIndicatorLabel.text = [NSString stringWithFormat:@"%lu / %d", currentImage + 1, splitter.countOfImages];
@@ -78,10 +80,12 @@
     if (currentImage > 0)
     {
         --currentImage;
-        UIImage *page = [[UIImage alloc] initWithData:[splitter dataForImage:currentImage]];
+        NSData* data = [splitter dataForImage:currentImage];
+        UIImage *page = [[UIImage alloc] initWithData: data];
         tiffPageView.image = page;
+        [data release];
         [page release];
-        
+
         pageIndicatorLabel.text = [NSString stringWithFormat:@"%lu / %d", currentImage + 1, splitter.countOfImages];
         nextPageButton.enabled = YES;
         if (currentImage == 0)
@@ -96,10 +100,12 @@
     if (currentImage < splitter.countOfImages - 1)
     {
         ++currentImage;
-        UIImage *page = [[UIImage alloc] initWithData:[splitter dataForImage:currentImage]];
+        NSData* data = [splitter dataForImage:currentImage];
+        UIImage *page = [[UIImage alloc] initWithData: data];
         tiffPageView.image = page;
+        [data release];
         [page release];
-        
+
         pageIndicatorLabel.text = [NSString stringWithFormat:@"%lu / %d", currentImage + 1, splitter.countOfImages];
         previousPageButton.enabled = YES;
         if (currentImage == splitter.countOfImages - 1)
