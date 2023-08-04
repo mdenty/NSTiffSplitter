@@ -38,7 +38,7 @@
     
     self = [super init];
     if (self)
-    { 
+    {
         // Define order of bytes
         if ('M' == [self valueForBytesAt:0 count:1])
         {
@@ -132,8 +132,8 @@
                 }
             }
         }
-    } 
-
+    }
+    
     return self;
 }
 
@@ -193,18 +193,18 @@
     }
     
     NSMutableData *oneData = [[NSMutableData alloc] initWithLength:[self.sizeOfImage[imageIndex] intValue]];
- 
+    
     // Copy header
     Byte *buffer = (Byte *)malloc(4);
     [self.data getBytes:buffer length:4];
     [oneData replaceBytesInRange:NSMakeRange(0, 4) withBytes:buffer];
     free(buffer);
     
-    // change offset of 1st IFD in header    
+    // change offset of 1st IFD in header
     int var = self.isBigEndian ? 134217728 : 8; // 134217728 = (as hex) 08 00 00 00
     [oneData replaceBytesInRange:NSMakeRange(4, 4) withBytes:&var];
-	
-	// How much fields we will transfer to new file
+    
+    // How much fields we will transfer to new file
     int ifdOffset = [self.IFDOffsets[imageIndex] intValue];
     size_t fieldsCount = [self valueForBytesAt:ifdOffset count:2];
     int properFields = 0;
@@ -215,7 +215,7 @@
         {
             ++properFields;
         }
-    }   
+    }
     
     // write count of fields in IFD in new file
     buffer = (Byte *)malloc(2);
@@ -227,20 +227,20 @@
     // Offset of next IFD is 0
     var = 0;
     [oneData replaceBytesInRange:NSMakeRange(8 + 2 + properFields * 12, 4) withBytes:&var];
-	
-	size_t largeValueOffset = 14 + properFields * 12; // 8 + 2 + properFieldsCount * 12 + 4; place where we will store large data (> 4 bytes)
+    
+    size_t largeValueOffset = 14 + properFields * 12; // 8 + 2 + properFieldsCount * 12 + 4; place where we will store large data (> 4 bytes)
     
     size_t stripOffsetsTagOld = 0, stripOffsetsTagNew = 0;
     size_t stripByteCountsTagOld = 0;
     size_t newOneFieldNumber = 0;
     size_t sizeOf_countOfBytesInStrip_type = 0;
-	for (int i = 0; i < fieldsCount; ++i)
-	{
+    for (int i = 0; i < fieldsCount; ++i)
+    {
         int fieldOffset = ifdOffset + 2 + 12 * i;
-		if ([self valueForBytesAt:fieldOffset+2 count:2] < MAX_DEFINED_TYPE + 1)
-		{
-			if ([self valueForBytesAt:fieldOffset count:2] == 273) // handle strip offsets
-			{
+        if ([self valueForBytesAt:fieldOffset+2 count:2] < MAX_DEFINED_TYPE + 1)
+        {
+            if ([self valueForBytesAt:fieldOffset count:2] == 273) // handle strip offsets
+            {
                 stripOffsetsTagOld = fieldOffset;
                 stripOffsetsTagNew = 10 + newOneFieldNumber * 12;
             }
@@ -252,7 +252,7 @@
             
             size_t bytesToCopy = [self.sizeOfTypes[[self valueForBytesAt:fieldOffset+2 count:2]] intValue] * [self valueForBytesAt:fieldOffset+4 count:4];
             if (bytesToCopy > 4) // in field's value/offset we can store only 4 bytes or offset of real data
-            {                    
+            {
                 // Write tag, type and count of field without changes
                 buffer = (Byte *)malloc(8);
                 [self.data getBytes:buffer range:NSMakeRange(fieldOffset, 8)];
@@ -285,10 +285,10 @@
             }
             
             ++newOneFieldNumber;
-		}
-	}    
+        }
+    }
     
-    // Rewrite all strip offsets    
+    // Rewrite all strip offsets
     size_t countOfStripes = [self valueForBytesAt:stripOffsetsTagOld+4 count:4];
     size_t offsetOfStripsOffsets = [self valueForBytesAt:stripOffsetsTagOld+8 count:4];
     size_t stripBytesCountOffset = [self valueForBytesAt:stripByteCountsTagOld+8 count:4];
@@ -303,7 +303,7 @@
     free(buffer);
     
     if (countOfStripes == 1)
-    {        
+    {
         size_t stripBytesCount = stripBytesCountOffset;
         size_t stripOffset = offsetOfStripsOffsets;
         
@@ -313,7 +313,7 @@
         [oneData replaceBytesInRange:NSMakeRange(largeValueOffset, stripBytesCount) withBytes:buffer];
         free(buffer);
         
-        // Write offset of strip        
+        // Write offset of strip
         buffer = (Byte *)malloc(4);
         buffer[self.isBigEndian ? 0 : 3] = (largeValueOffset >> 24) & 255;
         buffer[self.isBigEndian ? 1 : 2] = (largeValueOffset >> 16) & 255;
@@ -325,8 +325,8 @@
         largeValueOffset += stripBytesCount;
     }
     else
-    {        
-        // Write correct offset of stripsOffsets 
+    {
+        // Write correct offset of stripsOffsets
         size_t arrayOfStripsOffsets = largeValueOffset;
         largeValueOffset += 4 * countOfStripes;
         for (int j = 0; j < countOfStripes; ++j)
@@ -340,7 +340,7 @@
             [oneData replaceBytesInRange:NSMakeRange(largeValueOffset, stripBytesCount) withBytes:buffer];
             free(buffer);
             
-            // Write offset of strip        
+            // Write offset of strip
             buffer = (Byte *)malloc(4);
             buffer[self.isBigEndian ? 0 : 3] = (largeValueOffset >> 24) & 255;
             buffer[self.isBigEndian ? 1 : 2] = (largeValueOffset >> 16) & 255;
@@ -353,7 +353,7 @@
             arrayOfStripsOffsets += 4;
         }
     }
-        
+    
     // Set proper size of new data
     [oneData setLength:largeValueOffset];
     
@@ -365,17 +365,6 @@
 
 - (size_t) valueForBytesAt:(size_t)offset count:(size_t)count
 {
-//    let mut value = 0_usize;
-//    for i in 0..size {
-//        let byte = data[offset + i];
-//        if is_big_endian {
-//            value = (value << 8) | byte as usize;
-//        } else {
-//            let b = (byte as usize) << (8 * i);
-//            value |= b;
-//        }
-//    }
-//    return value;
     size_t value = 0;
     const unsigned char* bytes = (const unsigned char*)self.data.bytes;
     for (size_t i=0; i<count; ++i) {
@@ -386,32 +375,6 @@
             value |= byte << (8 * i);
         }
     }
-    return value;
-}
-
-- (int) oldValueForBytesAt:(int)offset count:(int)countOfBytes
-{
-    Byte *buffer = (Byte *)malloc(countOfBytes);
-    [self.data getBytes:buffer range:NSMakeRange(offset, countOfBytes)];
-    
-    if (!self.isBigEndian && countOfBytes > 1)
-    {
-        // Revert bytes
-        for (int i = 0; i < countOfBytes / 2; ++i)
-        {
-            Byte tmp = buffer[i];
-            buffer[i] = buffer[countOfBytes-i-1];
-            buffer[countOfBytes-i-1] = tmp;
-        }
-    }
-    
-    int value = buffer[0];
-    for (int i = 1; i < countOfBytes; ++i)
-    {
-        value <<= 8;
-        value |= buffer[i];
-    }
-    free(buffer);
     return value;
 }
 
