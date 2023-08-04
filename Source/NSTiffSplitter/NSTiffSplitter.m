@@ -9,7 +9,7 @@
 
 @interface NSTiffSplitter()
 
-- (int) valueForBytesAt:(int)offset count:(int)countOfBytes;
+- (size_t) valueForBytesAt:(size_t)offset count:(size_t)countOfBytes;
 
 @property (nonatomic, strong) NSData *data; // data from tiff file
     
@@ -57,11 +57,11 @@
         
         // Counting images
         self.countOfImages = 0;
-        int ifdOffset = [self valueForBytesAt:4 count:4];
+        size_t ifdOffset = [self valueForBytesAt:4 count:4];
         while (ifdOffset != 0)
         {
             ++self.countOfImages;
-            int countOfFields = [self valueForBytesAt:ifdOffset count:2];
+            size_t countOfFields = [self valueForBytesAt:ifdOffset count:2];
             ifdOffset = [self valueForBytesAt:ifdOffset+2+12*countOfFields count:4];
         }
         
@@ -86,47 +86,47 @@
             //self.sizeOfImage = (int *)malloc(self.countOfImages * sizeof(int));
             //self.IFDOffsets = (int *)malloc(self.countOfImages * sizeof(int));
             
-            self.IFDOffsets[0] = [NSNumber numberWithInt:[self valueForBytesAt:4 count:4]];
-            int countOfFields = [self valueForBytesAt:[self.IFDOffsets[0] intValue] count:2];
+            self.IFDOffsets[0] = [NSNumber numberWithUnsignedLong :[self valueForBytesAt:4 count:4]];
+            size_t countOfFields = [self valueForBytesAt:[self.IFDOffsets[0] intValue] count:2];
             for (int i = 0; i < self.countOfImages; ++i)
             {
                 if (i > 0)
                 {
-                    self.IFDOffsets[i] = [NSNumber numberWithInt:[self valueForBytesAt:[self.IFDOffsets[i-1] intValue]+2+12*countOfFields count:4]];
+                    self.IFDOffsets[i] = [NSNumber numberWithUnsignedLong:[self valueForBytesAt:[self.IFDOffsets[i-1] intValue]+2+12*countOfFields count:4]];
                     countOfFields = [self valueForBytesAt:[self.IFDOffsets[i] intValue] count:2];
                 }
                 
-                self.sizeOfImage[i] = [NSNumber numberWithInt:8 + 2 + 12 * countOfFields + 4]; // header + count of fields + fields + offset of next IFD (4 bytes of zeros)
+                self.sizeOfImage[i] = [NSNumber numberWithUnsignedLong:8 + 2 + 12 * countOfFields + 4]; // header + count of fields + fields + offset of next IFD (4 bytes of zeros)
                 for (int j = 0; j < countOfFields; ++j)
                 {
                     
-                    int tag = [self valueForBytesAt:[self.IFDOffsets[i] intValue]+2+12*j count:2];
-                    int tagType = [self valueForBytesAt:[self.IFDOffsets[i] intValue]+2+12*j+2 count:2];
-                    int countOfElements = [self valueForBytesAt:[self.IFDOffsets[i] intValue]+2+12*j+4 count:4];
+                    size_t tag = [self valueForBytesAt:[self.IFDOffsets[i] intValue]+2+12*j count:2];
+                    size_t tagType = [self valueForBytesAt:[self.IFDOffsets[i] intValue]+2+12*j+2 count:2];
+                    size_t countOfElements = [self valueForBytesAt:[self.IFDOffsets[i] intValue]+2+12*j+4 count:4];
                     
-                    int bytesInField = [self.sizeOfTypes[tagType] intValue] * countOfElements;
+                    size_t bytesInField = [self.sizeOfTypes[tagType] intValue] * countOfElements;
                     if (bytesInField > 4)
                     {
-                        int newValue = [self.sizeOfImage[i] intValue] + bytesInField;
-                        self.sizeOfImage[i] = [NSNumber numberWithInt:newValue];
+                        size_t newValue = [self.sizeOfImage[i] intValue] + bytesInField;
+                        self.sizeOfImage[i] = [NSNumber numberWithUnsignedLong:newValue];
                     }
                     
                     if (tag == 279) // strip byte counts
                     {
-                        int stripBytesOffset = [self valueForBytesAt:[self.IFDOffsets[i] intValue]+2+12*j+8 count:4];
+                        size_t stripBytesOffset = [self valueForBytesAt:[self.IFDOffsets[i] intValue]+2+12*j+8 count:4];
                         
                         if (bytesInField > 4)
                         {
                             for (int k = 0; k < countOfElements; ++k)
                             {
-                                int newValue = [self.sizeOfImage[i] intValue] + [self valueForBytesAt:stripBytesOffset+[self.sizeOfTypes[tagType] intValue]*k count:[self.sizeOfTypes[tagType] intValue]];
-                                self.sizeOfImage[i] = [NSNumber numberWithInt:newValue];
+                                size_t newValue = [self.sizeOfImage[i] intValue] + [self valueForBytesAt:stripBytesOffset+[self.sizeOfTypes[tagType] intValue]*k count:[self.sizeOfTypes[tagType] intValue]];
+                                self.sizeOfImage[i] = [NSNumber numberWithUnsignedLong:newValue];
                             }
                         }
                         else
                         {
-                            int newValue = [self.sizeOfImage[i] intValue] + stripBytesOffset;
-                            self.sizeOfImage[i] = [NSNumber numberWithInt:newValue]; //in this case it's not offset - it's value
+                            size_t newValue = [self.sizeOfImage[i] intValue] + stripBytesOffset;
+                            self.sizeOfImage[i] = [NSNumber numberWithUnsignedLong:newValue]; //in this case it's not offset - it's value
                         }
                     }
                 }
@@ -206,7 +206,7 @@
 	
 	// How much fields we will transfer to new file
     int ifdOffset = [self.IFDOffsets[imageIndex] intValue];
-	int fieldsCount = [self valueForBytesAt:ifdOffset count:2];    
+    size_t fieldsCount = [self valueForBytesAt:ifdOffset count:2];
     int properFields = 0;
     for (int i = 0; i < fieldsCount; ++i)
     {
@@ -228,12 +228,12 @@
     var = 0;
     [oneData replaceBytesInRange:NSMakeRange(8 + 2 + properFields * 12, 4) withBytes:&var];
 	
-	int largeValueOffset = 14 + properFields * 12; // 8 + 2 + properFieldsCount * 12 + 4; place where we will store large data (> 4 bytes)
+	size_t largeValueOffset = 14 + properFields * 12; // 8 + 2 + properFieldsCount * 12 + 4; place where we will store large data (> 4 bytes)
     
-    int stripOffsetsTagOld = 0, stripOffsetsTagNew = 0;
-    int stripByteCountsTagOld = 0;
-    int newOneFieldNumber = 0;
-    int sizeOf_countOfBytesInStrip_type = 0;
+    size_t stripOffsetsTagOld = 0, stripOffsetsTagNew = 0;
+    size_t stripByteCountsTagOld = 0;
+    size_t newOneFieldNumber = 0;
+    size_t sizeOf_countOfBytesInStrip_type = 0;
 	for (int i = 0; i < fieldsCount; ++i)
 	{
         int fieldOffset = ifdOffset + 2 + 12 * i;
@@ -250,7 +250,7 @@
                 sizeOf_countOfBytesInStrip_type = [self valueForBytesAt:fieldOffset+2 count:2];
             }
             
-            int bytesToCopy = [self.sizeOfTypes[[self valueForBytesAt:fieldOffset+2 count:2]] intValue] * [self valueForBytesAt:fieldOffset+4 count:4];
+            size_t bytesToCopy = [self.sizeOfTypes[[self valueForBytesAt:fieldOffset+2 count:2]] intValue] * [self valueForBytesAt:fieldOffset+4 count:4];
             if (bytesToCopy > 4) // in field's value/offset we can store only 4 bytes or offset of real data
             {                    
                 // Write tag, type and count of field without changes
@@ -289,9 +289,9 @@
 	}    
     
     // Rewrite all strip offsets    
-    int countOfStripes = [self valueForBytesAt:stripOffsetsTagOld+4 count:4];
-    int offsetOfStripsOffsets = [self valueForBytesAt:stripOffsetsTagOld+8 count:4];
-    int stripBytesCountOffset = [self valueForBytesAt:stripByteCountsTagOld+8 count:4];
+    size_t countOfStripes = [self valueForBytesAt:stripOffsetsTagOld+4 count:4];
+    size_t offsetOfStripsOffsets = [self valueForBytesAt:stripOffsetsTagOld+8 count:4];
+    size_t stripBytesCountOffset = [self valueForBytesAt:stripByteCountsTagOld+8 count:4];
     
     // Write tag with strip offset (or offset of array with stripes's offsets)
     buffer = (Byte *)malloc(4);
@@ -304,8 +304,8 @@
     
     if (countOfStripes == 1)
     {        
-        int stripBytesCount = stripBytesCountOffset;
-        int stripOffset = offsetOfStripsOffsets;
+        size_t stripBytesCount = stripBytesCountOffset;
+        size_t stripOffset = offsetOfStripsOffsets;
         
         // Write data
         buffer = (Byte *)malloc(stripBytesCount);
@@ -327,12 +327,12 @@
     else
     {        
         // Write correct offset of stripsOffsets 
-        int arrayOfStripsOffsets = largeValueOffset;
+        size_t arrayOfStripsOffsets = largeValueOffset;
         largeValueOffset += 4 * countOfStripes;
         for (int j = 0; j < countOfStripes; ++j)
         {
-            int stripBytesCount = [self valueForBytesAt:stripBytesCountOffset+4*j count:4];
-            int stripOffset = [self valueForBytesAt:offsetOfStripsOffsets+4*j count:4];
+            size_t stripBytesCount = [self valueForBytesAt:stripBytesCountOffset+4*j count:4];
+            size_t stripOffset = [self valueForBytesAt:offsetOfStripsOffsets+4*j count:4];
             
             // Write data
             buffer = (Byte *)malloc(stripBytesCount);
@@ -363,7 +363,33 @@
 
 #pragma mark - Auxiliary methods
 
-- (int) valueForBytesAt:(int)offset count:(int)countOfBytes
+- (size_t) valueForBytesAt:(size_t)offset count:(size_t)count
+{
+//    let mut value = 0_usize;
+//    for i in 0..size {
+//        let byte = data[offset + i];
+//        if is_big_endian {
+//            value = (value << 8) | byte as usize;
+//        } else {
+//            let b = (byte as usize) << (8 * i);
+//            value |= b;
+//        }
+//    }
+//    return value;
+    size_t value = 0;
+    const unsigned char* bytes = (const unsigned char*)self.data.bytes;
+    for (size_t i=0; i<count; ++i) {
+        size_t byte = bytes[offset + i];
+        if (self.isBigEndian) {
+            value = (value << 8) | byte;
+        } else {
+            value |= byte << (8 * i);
+        }
+    }
+    return value;
+}
+
+- (int) oldValueForBytesAt:(int)offset count:(int)countOfBytes
 {
     Byte *buffer = (Byte *)malloc(countOfBytes);
     [self.data getBytes:buffer range:NSMakeRange(offset, countOfBytes)];
